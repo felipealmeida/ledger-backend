@@ -12,18 +12,28 @@ import {
   LedgerBalanceResponse, 
   ValidationResponse
 } from '../types';
+import { 
+  ApiTags, 
+  ApiOperation, 
+  ApiResponse, 
+  ApiParam, 
+  ApiQuery 
+} from '@nestjs/swagger';
 
+@ApiTags('ledger')
 @Controller('api')
 export class LedgerController {
   constructor(private readonly ledgerService: LedgerService) {}
 
+  @ApiQuery({ name: 'period', required: false, description: 'Period filter (e.g., 2025/07)', example: '2025/07' })
   @Get('balance')
   async getBalance(
     @Query('file') file: string = 'main.ledger',
-    @Query('command') command: string = 'bal'
+    @Query('command') command: string = 'bal',
+    @Query('period') period?: string      
   ): Promise<LedgerBalanceResponse> {
     try {
-      return await this.ledgerService.getBalance(file, command);
+      return await this.ledgerService.getBalance(file, command, period);
     } catch (error) {
       throw new HttpException(
         {
@@ -35,17 +45,19 @@ export class LedgerController {
     }
   }
 
+  @ApiQuery({ name: 'period', required: false, description: 'Period filter (e.g., 2025/07)', example: '2025/07' })
   @Get('balance/:account')
   async getAccountBalance(
     @Param('account') account: string,
-    @Query('file') file: string = 'main.ledger'
+    @Query('file') file: string = 'main.ledger',
+    @Query('period') period?: string
   ): Promise<LedgerBalanceResponse> {
     try {
       if (!account || account.trim() === '') {
         throw new BadRequestException('Account parameter is required');
       }
       
-      return await this.ledgerService.getAccountBalance(account, file);
+      return await this.ledgerService.getAccountBalance(account, file, period);
     } catch (error) {
       if (error instanceof BadRequestException) {
         throw error;

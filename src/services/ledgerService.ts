@@ -61,10 +61,15 @@ export class LedgerService {
    */
   async executeLedgerCommand(
     ledgerFile: string = 'main.ledger', 
-    command: string = 'bal'
+    command: string = 'bal',
+    period?: string
   ): Promise<LedgerBalanceResponse> {
     try {
-      const cmd = `ledger -f /app/ledger-data/${ledgerFile} ${command}`;
+      let cmd = `ledger -f /app/ledger/personal/${ledgerFile}`;
+      if (period) {
+        cmd += ` --period ${period}`;
+      }
+      cmd += ` ${command}`;        
       this.logger.log(`Executing command: ${cmd}`);
       
       const { stdout, stderr } = await execAsync(cmd, { 
@@ -103,16 +108,16 @@ export class LedgerService {
   /**
    * Get balance for all accounts
    */
-  async getBalance(file?: string, command?: string): Promise<LedgerBalanceResponse> {
-    return this.executeLedgerCommand(file, command);
+  async getBalance(file?: string, command?: string, period?: string): Promise<LedgerBalanceResponse> {
+    return this.executeLedgerCommand(file, command, period);
   }
 
   /**
    * Get balance for a specific account
    */
-  async getAccountBalance(account: string, file?: string): Promise<LedgerBalanceResponse> {
+  async getAccountBalance(account: string, file?: string, period?: string): Promise<LedgerBalanceResponse> {
     const command = `bal ${account}`;
-    return this.executeLedgerCommand(file, command);
+    return this.executeLedgerCommand(file, command, period);
   }
 
   /**

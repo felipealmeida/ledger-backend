@@ -29,6 +29,12 @@ export class LedgerBalanceResponse {
 
   @ApiProperty({ description: 'Total balance' })
   total: number;
+
+  @ApiProperty({ description: 'Period filter used in the query', required: false })
+  period?: string;
+
+  @ApiProperty({ description: 'Executed ledger command', required: false })
+  command?: string;
 }
 
 export class LedgerError {
