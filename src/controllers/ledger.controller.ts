@@ -1,105 +1,125 @@
 import { 
-  Controller, 
-  Get, 
-  Param, 
-  Query, 
-  HttpException, 
-  HttpStatus,
-  BadRequestException
+    Controller, 
+    Get, 
+    Param, 
+    Query, 
+    HttpException, 
+    HttpStatus,
+    BadRequestException
 } from '@nestjs/common';
 import { LedgerService } from '../services/ledgerService';
 import { 
-  LedgerBalanceResponse, 
-  ValidationResponse
+    LedgerBalanceResponse, 
+    ValidationResponse
 } from '../types';
 import { 
-  ApiTags, 
-  ApiOperation, 
-  ApiResponse, 
-  ApiParam, 
-  ApiQuery 
+    ApiTags, 
+    ApiOperation, 
+    ApiResponse, 
+    ApiParam, 
+    ApiQuery 
 } from '@nestjs/swagger';
 
 @ApiTags('ledger')
 @Controller('api')
 export class LedgerController {
-  constructor(private readonly ledgerService: LedgerService) {}
+    constructor(private readonly ledgerService: LedgerService) {}
 
-  @ApiQuery({ name: 'period', required: false, description: 'Period filter (e.g., 2025/07)', example: '2025/07' })
-  @Get('balance')
-  async getBalance(
-    @Query('file') file: string = 'main.ledger',
-    @Query('command') command: string = 'bal',
-    @Query('period') period?: string      
-  ): Promise<LedgerBalanceResponse> {
-    try {
-      return await this.ledgerService.getBalance(file, command, period);
-    } catch (error) {
-      throw new HttpException(
-        {
-          error: 'Internal server error',
-          details: error
-        },
-        HttpStatus.INTERNAL_SERVER_ERROR
-      );
+    @ApiQuery({ name: 'period', required: false, description: 'Period filter (e.g., 2025/07)', example: '2025/07' })
+    @Get('balance')
+    async getBalance(
+        @Query('file') file: string = 'main.ledger',
+        @Query('command') command: string = 'bal',
+        @Query('period') period?: string      
+    ): Promise<LedgerBalanceResponse> {
+        try {
+            return await this.ledgerService.getBalance(file, command, period);
+        } catch (error) {
+            throw new HttpException(
+                {
+                    error: 'Internal server error',
+                    details: error
+                },
+                HttpStatus.INTERNAL_SERVER_ERROR
+            );
+        }
     }
-  }
 
-  @ApiQuery({ name: 'period', required: false, description: 'Period filter (e.g., 2025/07)', example: '2025/07' })
-  @Get('balance/:account')
-  async getAccountBalance(
-    @Param('account') account: string,
-    @Query('file') file: string = 'main.ledger',
-    @Query('period') period?: string
-  ): Promise<LedgerBalanceResponse> {
-    try {
-      if (!account || account.trim() === '') {
-        throw new BadRequestException('Account parameter is required');
-      }
-      
-      return await this.ledgerService.getAccountBalance(account, file, period);
-    } catch (error) {
-      if (error instanceof BadRequestException) {
-        throw error;
-      }
-      
-      throw new HttpException(
-        {
-          error: 'Internal server error',
-          details: error
-        },
-        HttpStatus.INTERNAL_SERVER_ERROR
-      );
+    @ApiQuery({ name: 'period', required: false, description: 'Period filter (e.g., 2025/07)', example: '2025/07' })
+    @Get('balance/:account')
+    async getAccountBalance(
+        @Param('account') account: string,
+        @Query('file') file: string = 'main.ledger',
+        @Query('period') period?: string
+    ): Promise<LedgerBalanceResponse> {
+        try {
+            if (!account || account.trim() === '') {
+                throw new BadRequestException('Account parameter is required');
+            }
+            
+            return await this.ledgerService.getAccountBalance(account, file, period);
+        } catch (error) {
+            if (error instanceof BadRequestException) {
+                throw error;
+            }
+            
+            throw new HttpException(
+                {
+                    error: 'Internal server error',
+                    details: error
+                },
+                HttpStatus.INTERNAL_SERVER_ERROR
+            );
+        }
     }
-  }
 
-  @Get('validate/:file')
-  async validateFile(@Param('file') file: string): Promise<ValidationResponse> {
-    try {
-      const isValid = await this.ledgerService.validateLedgerFile(file);
-      
-      return {
-        file,
-        valid: isValid,
-        timestamp: new Date().toISOString()
-      };
-    } catch (error) {
-      throw new HttpException(
-        {
-          error: 'Validation failed',
-          details: error
-        },
-        HttpStatus.INTERNAL_SERVER_ERROR
-      );
+    @Get('transactions/:account')
+    @ApiOperation({ summary: 'Get transactions for specific account' })
+    @ApiParam({ name: 'account', description: 'Account name' })
+    @ApiQuery({ name: 'file', required: false, description: 'Ledger file name' })
+    @ApiQuery({ name: 'period', required: false, description: 'Period filter' })
+    async getAccountTransactions(
+        @Param('account') account: string,
+        @Query('file') file: string = 'main.ledger',
+        @Query('period') period?: string
+    ) {
+        try {
+            return await this.ledgerService.getAccountTransactions(account, file, period);
+        } catch (error) {
+            throw new HttpException(
+                { error: 'Internal server error', details: error },
+                HttpStatus.INTERNAL_SERVER_ERROR
+            );
+        }
     }
-  }
 
-  @Get('health')
-  getHealth() {
-    return {
-      status: 'OK',
-      timestamp: new Date().toISOString(),
-      service: 'ledger-api'
-    };
-  }
+    @Get('validate/:file')
+    async validateFile(@Param('file') file: string): Promise<ValidationResponse> {
+        try {
+            const isValid = await this.ledgerService.validateLedgerFile(file);
+            
+            return {
+                file,
+                valid: isValid,
+                timestamp: new Date().toISOString()
+            };
+        } catch (error) {
+            throw new HttpException(
+                {
+                    error: 'Validation failed',
+                    details: error
+                },
+                HttpStatus.INTERNAL_SERVER_ERROR
+            );
+        }
+    }
+
+    @Get('health')
+    getHealth() {
+        return {
+            status: 'OK',
+            timestamp: new Date().toISOString(),
+            service: 'ledger-api'
+        };
+    }
 }

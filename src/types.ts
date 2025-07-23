@@ -17,9 +17,26 @@ export class LedgerAccount {
   isSubAccount: boolean;
 }
 
+export class LedgerAccountNode {
+  @ApiProperty({ description: 'Account name' })
+  account: string;
+
+  @ApiProperty({ description: 'Numeric amount' })
+  amount: number;
+
+  @ApiProperty({ description: 'Formatted amount with currency' })
+  formattedAmount: string;
+
+  @ApiProperty({ description: 'Child accounts', type: [LedgerAccountNode] })
+  children: LedgerAccountNode[];
+
+  @ApiProperty({ description: 'Whether this account has children' })
+  hasChildren: boolean;
+}
+
 export class LedgerBalanceResponse {
-  @ApiProperty({ type: [LedgerAccount], description: 'List of accounts with balances' })
-  accounts: LedgerAccount[];
+  @ApiProperty({ type: [LedgerAccountNode], description: 'Hierarchical account tree' })
+  accounts: LedgerAccountNode[];
 
   @ApiProperty({ description: 'Currency code' })
   currency: string;
