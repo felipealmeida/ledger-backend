@@ -65,7 +65,7 @@ export class LedgerService {
     period?: string
   ): Promise<LedgerBalanceResponse> {
     try {
-      let cmd = `ledger -f /app/ledger/personal/${ledgerFile}`;
+      let cmd = `ledger -f /app/ledger-data/${ledgerFile}`;
       if (period) {
         cmd += ` --period ${period}`;
       }
