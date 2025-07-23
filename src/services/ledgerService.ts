@@ -64,7 +64,7 @@ export class LedgerService {
     command: string = 'bal'
   ): Promise<LedgerBalanceResponse> {
     try {
-      const cmd = `ledger -f ~/ledger/personal/${ledgerFile} ${command}`;
+      const cmd = `ledger -f /app/ledger-data/${ledgerFile} ${command}`;
       this.logger.log(`Executing command: ${cmd}`);
       
       const { stdout, stderr } = await execAsync(cmd, { 
