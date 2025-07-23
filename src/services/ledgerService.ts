@@ -9,40 +9,50 @@ const execAsync = promisify(exec);
 export class LedgerService {
     private readonly logger = new Logger(LedgerService.name);
 
+
     /**
      * Build hierarchical tree from flat account list
      */
     private buildAccountTree(flatAccounts: LedgerAccount[]): LedgerAccountNode[] {
         const tree: LedgerAccountNode[] = [];
-        const stack: LedgerAccountNode[] = [];
-
+        const nodeMap = new Map<string, LedgerAccountNode>();
+        
+        // First, create all nodes
         for (const account of flatAccounts) {
             const node: LedgerAccountNode = {
                 account: account.account,
+                fullPath: account.fullPath,
                 amount: account.amount,
                 formattedAmount: account.formattedAmount,
                 children: [],
                 hasChildren: false
             };
-
-            // Find the correct parent based on indentation level
-            while (stack.length > account.indentLevel) {
-                stack.pop();
-            }
-
-            if (stack.length === 0) {
-                // Top-level account
+            nodeMap.set(account.fullPath, node);
+        }
+        
+        // Then, build the tree structure
+        for (const account of flatAccounts) {
+            const node = nodeMap.get(account.fullPath)!;
+            const pathParts = account.fullPath.split(':');
+            
+            if (pathParts.length === 1) {
+                // Root level account
                 tree.push(node);
             } else {
-                // Child account - add to parent's children
-                const parent = stack[stack.length - 1];
-                parent.children.push(node);
-                parent.hasChildren = true;
+                // Find parent path
+                const parentPath = pathParts.slice(0, -1).join(':');
+                const parentNode = nodeMap.get(parentPath);
+                
+                if (parentNode) {
+                    parentNode.children.push(node);
+                    parentNode.hasChildren = true;
+                } else {
+                    // If parent doesn't exist in the data, add as root
+                    tree.push(node);
+                }
             }
-
-            stack.push(node);
         }
-
+        
         return tree;
     }
 
@@ -64,42 +74,35 @@ export class LedgerService {
             // Parse account line using regex
             const match = line.match(/^\s*(BRL\s*[+-]?[\d,]+\.\d{2})\s+(.+)$/);
             if (match) {
-                const [, amountStr, accountName] = match;
-                
-                // Find where the amount starts and ends
-                const amountStartPosition = line.indexOf(amountStr);
-                const amountEndPosition = amountStartPosition + amountStr.length;
-    
+                const [, amountStr, fullAccountPath] = match;
+
                 // Find where the account name starts
-                const accountNameTrimmed = accountName.trim();
-                const accountStartPosition = line.indexOf(accountNameTrimmed);
-    
-                // Calculate spaces between amount end and account start
-                const spacesBetween = accountStartPosition - amountEndPosition;
-    
+                const fullAccountPathTrimmed = fullAccountPath.trim();
+
                 // Parse amount
                 const numericAmount = parseFloat(
                     amountStr.replace('BRL', '').replace(/,/g, '').trim()
                 );
-                
-                // Determine indentation level based on account start position
-                const indentLevel = (spacesBetween - 2) / 2;
-                this.logger.log(`Account: "${accountNameTrimmed}", position: ${accountStartPosition}, level: ${indentLevel}`);
-                
+
+                // Extract just the account name (last part after the last colon)
+                const accountParts = fullAccountPathTrimmed.split(':');
+                const accountName = accountParts[accountParts.length - 1];
+
+                this.logger.log(`Full path: "${fullAccountPathTrimmed}", account name: "${accountName}"`);
+
                 accounts.push({
-                    account: accountNameTrimmed,
+                    account: accountName,
+                    fullPath: fullAccountPathTrimmed,
                     amount: numericAmount,
-                    formattedAmount: amountStr.trim(),
-                    indentLevel,
-                    isSubAccount: indentLevel > 0
+                    formattedAmount: amountStr.trim()
                 });
             }
         }
-        
+
         const accountTree = this.buildAccountTree(accounts);
         
         return {
-            accounts: accountTree, // Return tree instead of flat list
+            accounts: accountTree,
             currency: 'BRL',
             timestamp: new Date().toISOString(),
             total: 0
@@ -111,7 +114,7 @@ export class LedgerService {
         command: string = 'bal',
         period?: string
     ): string {
-        let cmd = `ledger -f /app/ledger-data/${ledgerFile}`;
+        let cmd = `ledger --flat -f /app/ledger-data/${ledgerFile}`;
   
         // Add period filter if provided
         if (period) {

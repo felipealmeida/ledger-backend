@@ -10,11 +10,8 @@ export class LedgerAccount {
   @ApiProperty({ description: 'Formatted amount with currency' })
   formattedAmount: string;
 
-  @ApiProperty({ description: 'Indentation level in the hierarchy' })
-  indentLevel: number;
-
-  @ApiProperty({ description: 'Whether this is a sub-account' })
-  isSubAccount: boolean;
+  @ApiProperty({ description: 'Full path to account' })
+  fullPath: string;
 }
 
 export class LedgerAccountNode {
@@ -32,6 +29,9 @@ export class LedgerAccountNode {
 
   @ApiProperty({ description: 'Whether this account has children' })
   hasChildren: boolean;
+
+  @ApiProperty({ description: 'Full path to account' })
+  fullPath: string;
 }
 
 export class LedgerBalanceResponse {
