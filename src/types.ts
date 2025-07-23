@@ -34,6 +34,26 @@ export class LedgerAccountNode {
   fullPath: string;
 }
 
+export class LedgerTransactionNode {
+  @ApiProperty({ description: 'Numeric amount' })
+  amount: number;
+
+  @ApiProperty({ description: 'Formatted amount with currency' })
+  formattedAmount: string;
+
+  @ApiProperty({ description: 'Numeric amount' })
+  runningBalance: number;
+
+  @ApiProperty({ description: 'Formatted amount with currency' })
+  formattedrunningBalance: string;
+
+  @ApiProperty({ description: 'Description of the transaction' })
+  description: string;
+
+  @ApiProperty({ description: 'Date of the transaction' })
+  date: string;
+}
+
 export class LedgerBalanceResponse {
   @ApiProperty({ type: [LedgerAccountNode], description: 'Hierarchical account tree' })
   accounts: LedgerAccountNode[];
@@ -52,6 +72,20 @@ export class LedgerBalanceResponse {
 
   @ApiProperty({ description: 'Executed ledger command', required: false })
   command?: string;
+}
+
+export class LedgerTransactionResponse {
+  @ApiProperty({ type: [LedgerAccountNode], description: 'Hierarchical account tree' })
+  transactions: LedgerTransactionNode[];
+
+  @ApiProperty({ description: 'Timestamp of the response' })
+  timestamp: string;
+
+  @ApiProperty({ description: 'Period filter used in the query', required: false })
+  period?: string;
+
+  @ApiProperty({ description: 'Account name' })
+  account: string;
 }
 
 export class LedgerError {

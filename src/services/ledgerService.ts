@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { exec } from 'child_process';
 import { promisify } from 'util';
-import { LedgerAccount, LedgerAccountNode, LedgerBalanceResponse, LedgerError } from '../types';
+import { LedgerAccount, LedgerAccountNode, LedgerTransactionNode, LedgerTransactionResponse, LedgerBalanceResponse, LedgerError } from '../types';
 
 const execAsync = promisify(exec);
 
@@ -170,11 +170,11 @@ export class LedgerService {
         }
     }
 
-    async getAccountTransactions(account: string, file?: string, period?: string): Promise<any> {
+    async getAccountTransactions(account: string, file?: string, period?: string): Promise<LedgerTransactionResponse> {
         try {
             //await this.executeGitPull();
             
-            const cmd = this.buildLedgerCommand(file, 'reg ' + account, period);
+            const cmd = this.buildLedgerCommand(file, 'reg "' + account + '" --sort date --date-format "%Y/%m/%d"', period);
             this.logger.log(`Executing command: ${cmd}`);
             
             const { stdout, stderr } = await execAsync(cmd, { 
@@ -185,6 +185,8 @@ export class LedgerService {
             if (stderr) {
                 this.logger.warn(`Ledger stderr: ${stderr}`);
             }
+
+            this.logger.log(`Output:\n${stdout}`);
             
             return {
                 transactions: this.parseTransactions(stdout),
@@ -199,21 +201,23 @@ export class LedgerService {
         }
     }
 
-    // ADD this new method:
-    private parseTransactions(output: string): any[] {
+    private parseTransactions(output: string): LedgerTransactionNode[] {
         const lines = output.split('\n').filter(line => line.trim() !== '');
         const transactions = [];
         
         for (const line of lines) {
+            this.logger.log(`line ${line}`);
             const match = line.match(/^(\d{4}\/\d{2}\/\d{2})\s+(.+?)\s+(BRL\s*[+-]?[\d,]+\.\d{2})\s+(.+)$/);
             if (match) {
-                const [, date, description, amount, account] = match;
+                this.logger.log(`a match for ${line}`);
+                const [, date, description, amount, runningBalance] = match;
                 transactions.push({
                     date,
                     description: description.trim(),
                     amount: parseFloat(amount.replace('BRL', '').replace(/,/g, '').trim()),
                     formattedAmount: amount.trim(),
-                    account: account.trim()
+                    runningBalance: parseFloat(runningBalance.replace('BRL', '').replace(/,/g, '').trim()),
+                    formattedRunningBalance: runningBalance.trim()
                 });
             }
         }

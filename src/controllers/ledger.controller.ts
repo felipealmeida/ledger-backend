@@ -10,6 +10,7 @@ import {
 import { LedgerService } from '../services/ledgerService';
 import { 
     LedgerBalanceResponse, 
+    LedgerTransactionResponse, 
     ValidationResponse
 } from '../types';
 import { 
@@ -82,7 +83,7 @@ export class LedgerController {
         @Param('account') account: string,
         @Query('file') file: string = 'main.ledger',
         @Query('period') period?: string
-    ) {
+    ): Promise<LedgerTransactionResponse> {
         try {
             return await this.ledgerService.getAccountTransactions(account, file, period);
         } catch (error) {
