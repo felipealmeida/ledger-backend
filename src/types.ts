@@ -10,8 +10,17 @@ export class LedgerAccount {
   @ApiProperty({ description: 'Formatted amount with currency' })
   formattedAmount: string;
 
+  @ApiProperty({ description: 'Numeric cleared amount' })
+  clearedAmount: number;
+
+  @ApiProperty({ description: 'Formatted cleared amount with currency' })
+  formattedClearedAmount: string;
+
   @ApiProperty({ description: 'Full path to account' })
   fullPath: string;
+
+  @ApiProperty({ description: 'Last cleared date' })
+  lastClearedDate: string;
 }
 
 export class LedgerAccountNode {
@@ -24,6 +33,12 @@ export class LedgerAccountNode {
   @ApiProperty({ description: 'Formatted amount with currency' })
   formattedAmount: string;
 
+  @ApiProperty({ description: 'Numeric cleared amount' })
+  clearedAmount: number;
+
+  @ApiProperty({ description: 'Formatted cleared amount with currency' })
+  formattedClearedAmount: string;
+
   @ApiProperty({ description: 'Child accounts', type: [LedgerAccountNode] })
   children: LedgerAccountNode[];
 
@@ -32,6 +47,9 @@ export class LedgerAccountNode {
 
   @ApiProperty({ description: 'Full path to account' })
   fullPath: string;
+
+  @ApiProperty({ description: 'Last cleared date' })
+  lastClearedDate: string;
 }
 
 export class LedgerTransactionNode {
@@ -45,7 +63,7 @@ export class LedgerTransactionNode {
   runningBalance: number;
 
   @ApiProperty({ description: 'Formatted amount with currency' })
-  formattedrunningBalance: string;
+  formattedRunningBalance: string;
 
   @ApiProperty({ description: 'Description of the transaction' })
   description: string;

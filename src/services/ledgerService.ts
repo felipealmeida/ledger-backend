@@ -24,6 +24,9 @@ export class LedgerService {
                 fullPath: account.fullPath,
                 amount: account.amount,
                 formattedAmount: account.formattedAmount,
+                clearedAmount: account.clearedAmount,
+                formattedClearedAmount: account.formattedClearedAmount,
+                lastClearedDate: account.lastClearedDate,
                 children: [],
                 hasChildren: false
             };
@@ -71,34 +74,43 @@ export class LedgerService {
                 continue;
             }
             
-            // Parse account line using regex
-            const match = line.match(/^\s*(BRL\s*[+-]?[\d,]+\.\d{2})\s+(.+)$/);
-            if (match) {
-                const [, amountStr, fullAccountPath] = match;
+            // Updated regex to match the new format with multiple amount columns and optional date
+            // Format: Amount1  Amount2  [Date]  Account
+            const match = line.match(/^\s*(BRL\s*[+-]?[\d,]+\.\d{2})\s+(BRL\s*[+-]?[\d,]+\.\d{2}|\d+)\s+(?:(\d{4}\/\d{2}\/\d{2})\s+)?(.+)$/);
 
-                // Find where the account name starts
-                const fullAccountPathTrimmed = fullAccountPath.trim();
+            if (match) {
+                const [, amountStr, clearedAmountStr, clearedDate, fullAccountPath] = match;
 
                 // Parse amount
                 const numericAmount = parseFloat(
                     amountStr.replace('BRL', '').replace(/,/g, '').trim()
                 );
-
+                // Parse amount
+                const numericClearedAmount = parseFloat(
+                    clearedAmountStr.replace('BRL', '').replace(/,/g, '').trim()
+                );
+                
                 // Extract just the account name (last part after the last colon)
+                const fullAccountPathTrimmed = fullAccountPath.trim();
                 const accountParts = fullAccountPathTrimmed.split(':');
                 const accountName = accountParts[accountParts.length - 1];
-
-                this.logger.log(`Full path: "${fullAccountPathTrimmed}", account name: "${accountName}"`);
+                
+                this.logger.log(`Full path: "${fullAccountPathTrimmed}", account name: "${accountName}", date: "${clearedDate || 'N/A'}"`);
 
                 accounts.push({
                     account: accountName,
                     fullPath: fullAccountPathTrimmed,
                     amount: numericAmount,
-                    formattedAmount: amountStr.trim()
+                    formattedAmount: amountStr.trim(),
+                    clearedAmount: numericClearedAmount,
+                    formattedClearedAmount: clearedAmountStr.trim(),
+                    lastClearedDate: clearedDate || undefined
                 });
+            } else {
+                this.logger.warn(`Not matched this line: ${line}`);
             }
         }
-
+        
         const accountTree = this.buildAccountTree(accounts);
         
         return {
@@ -132,7 +144,7 @@ export class LedgerService {
         period?: string
     ): Promise<LedgerBalanceResponse> {
         try {
-            const cmd = this.buildLedgerCommand(command, period);
+            const cmd = this.buildLedgerCommand(command, period) + '  --date-format "%Y/%m/%d"';
             this.logger.log(`Executing command: ${cmd}`);
             
             const { stdout, stderr } = await execAsync(cmd, { 

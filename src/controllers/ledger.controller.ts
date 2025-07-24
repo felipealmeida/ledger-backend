@@ -33,7 +33,7 @@ export class LedgerController {
         @Query('period') period?: string      
     ): Promise<LedgerBalanceResponse> {
         try {
-            return await this.ledgerService.getBalance(command, period);
+            return await this.ledgerService.getBalance('cleared', period);
         } catch (error) {
             throw new HttpException(
                 {
