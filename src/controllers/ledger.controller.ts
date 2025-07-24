@@ -29,12 +29,11 @@ export class LedgerController {
     @ApiQuery({ name: 'period', required: false, description: 'Period filter (e.g., 2025/07)', example: '2025/07' })
     @Get('balance')
     async getBalance(
-        @Query('file') file: string = 'main.ledger',
         @Query('command') command: string = 'bal',
         @Query('period') period?: string      
     ): Promise<LedgerBalanceResponse> {
         try {
-            return await this.ledgerService.getBalance(file, command, period);
+            return await this.ledgerService.getBalance(command, period);
         } catch (error) {
             throw new HttpException(
                 {
@@ -50,7 +49,6 @@ export class LedgerController {
     @Get('balance/:account')
     async getAccountBalance(
         @Param('account') account: string,
-        @Query('file') file: string = 'main.ledger',
         @Query('period') period?: string
     ): Promise<LedgerBalanceResponse> {
         try {
@@ -58,7 +56,7 @@ export class LedgerController {
                 throw new BadRequestException('Account parameter is required');
             }
             
-            return await this.ledgerService.getAccountBalance(account, file, period);
+            return await this.ledgerService.getAccountBalance(account, period);
         } catch (error) {
             if (error instanceof BadRequestException) {
                 throw error;
@@ -77,39 +75,16 @@ export class LedgerController {
     @Get('transactions/:account')
     @ApiOperation({ summary: 'Get transactions for specific account' })
     @ApiParam({ name: 'account', description: 'Account name' })
-    @ApiQuery({ name: 'file', required: false, description: 'Ledger file name' })
     @ApiQuery({ name: 'period', required: false, description: 'Period filter' })
     async getAccountTransactions(
         @Param('account') account: string,
-        @Query('file') file: string = 'main.ledger',
         @Query('period') period?: string
     ): Promise<LedgerTransactionResponse> {
         try {
-            return await this.ledgerService.getAccountTransactions(account, file, period);
+            return await this.ledgerService.getAccountTransactions(account, period);
         } catch (error) {
             throw new HttpException(
                 { error: 'Internal server error', details: error },
-                HttpStatus.INTERNAL_SERVER_ERROR
-            );
-        }
-    }
-
-    @Get('validate/:file')
-    async validateFile(@Param('file') file: string): Promise<ValidationResponse> {
-        try {
-            const isValid = await this.ledgerService.validateLedgerFile(file);
-            
-            return {
-                file,
-                valid: isValid,
-                timestamp: new Date().toISOString()
-            };
-        } catch (error) {
-            throw new HttpException(
-                {
-                    error: 'Validation failed',
-                    details: error
-                },
                 HttpStatus.INTERNAL_SERVER_ERROR
             );
         }

@@ -110,11 +110,10 @@ export class LedgerService {
     }
 
     private buildLedgerCommand(
-        ledgerFile: string = 'main.ledger',
         command: string = 'bal',
         period?: string
     ): string {
-        let cmd = `ledger --flat -f /app/ledger-data/${ledgerFile}`;
+        let cmd = `ledger --flat -f /app/ledger-data/main.ledger`;
   
         // Add period filter if provided
         if (period) {
@@ -129,12 +128,11 @@ export class LedgerService {
      * Execute ledger command and return parsed results
      */
     async executeLedgerCommand(
-        ledgerFile: string = 'main.ledger', 
         command: string = 'bal',
         period?: string
     ): Promise<LedgerBalanceResponse> {
         try {
-            const cmd = this.buildLedgerCommand(ledgerFile, command, period);
+            const cmd = this.buildLedgerCommand(command, period);
             this.logger.log(`Executing command: ${cmd}`);
             
             const { stdout, stderr } = await execAsync(cmd, { 
@@ -170,11 +168,11 @@ export class LedgerService {
         }
     }
 
-    async getAccountTransactions(account: string, file?: string, period?: string): Promise<LedgerTransactionResponse> {
+    async getAccountTransactions(account: string, period?: string): Promise<LedgerTransactionResponse> {
         try {
             //await this.executeGitPull();
             
-            const cmd = this.buildLedgerCommand(file, 'reg "' + account + '" --sort date --date-format "%Y/%m/%d"', period);
+            const cmd = this.buildLedgerCommand('reg "' + account + '" --sort date --date-format "%Y/%m/%d"', period);
             this.logger.log(`Executing command: ${cmd}`);
             
             const { stdout, stderr } = await execAsync(cmd, { 
@@ -228,33 +226,15 @@ export class LedgerService {
     /**
      * Get balance for all accounts
      */
-    async getBalance(file?: string, command?: string, period?: string): Promise<LedgerBalanceResponse> {
-        return this.executeLedgerCommand(file, command, period);
+    async getBalance(command?: string, period?: string): Promise<LedgerBalanceResponse> {
+        return this.executeLedgerCommand(command, period);
     }
 
     /**
      * Get balance for a specific account
      */
-    async getAccountBalance(account: string, file?: string, period?: string): Promise<LedgerBalanceResponse> {
+    async getAccountBalance(account: string, period?: string): Promise<LedgerBalanceResponse> {
         const command = `bal ${account}`;
-        return this.executeLedgerCommand(file, command, period);
-    }
-
-    /**
-     * Validate ledger file exists and is readable
-     */
-    async validateLedgerFile(file: string): Promise<boolean> {
-        try {
-            this.logger.log(`Validating ledger file: ${file}`);
-            const { stdout } = await execAsync(`ledger -f ${file} --version`, {
-                timeout: 5000
-            });
-            const isValid = stdout.includes('Ledger');
-            this.logger.log(`File validation result for ${file}: ${isValid}`);
-            return isValid;
-        } catch (error) {
-            this.logger.error(`File validation failed for ${file}: ${error}`);
-            return false;
-        }
+        return this.executeLedgerCommand(command, period);
     }
 }
