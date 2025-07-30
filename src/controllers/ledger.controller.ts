@@ -11,6 +11,7 @@ import { LedgerService } from '../services/ledgerService';
 import { 
     LedgerBalanceResponse, 
     LedgerTransactionResponse, 
+    LedgerSubTotalsResponse, 
     ValidationResponse
 } from '../types';
 import { 
@@ -57,6 +58,51 @@ export class LedgerController {
             }
             
             return await this.ledgerService.getAccountBalance(account, period);
+        } catch (error) {
+            if (error instanceof BadRequestException) {
+                throw error;
+            }
+            
+            throw new HttpException(
+                {
+                    error: 'Internal server error',
+                    details: error
+                },
+                HttpStatus.INTERNAL_SERVER_ERROR
+            );
+        }
+    }
+
+    @ApiQuery({ name: 'period', required: false, description: 'Period filter (e.g., 2025/07)', example: '2025/07' })
+    @Get('cash-flow')
+    async getCashFlow(
+        @Query('period') period?: string      
+    ): Promise<LedgerSubTotalsResponse> {
+        try {
+            return await this.ledgerService.getCashFlow(period);
+        } catch (error) {
+            throw new HttpException(
+                {
+                    error: 'Internal server error',
+                    details: error
+                },
+                HttpStatus.INTERNAL_SERVER_ERROR
+            );
+        }
+    }
+
+    @ApiQuery({ name: 'period', required: false, description: 'Period filter (e.g., 2025/07)', example: '2025/07' })
+    @Get('cash-flow/:account')
+    async getAccountCashFlow(
+        @Param('account') account: string,
+        @Query('period') period?: string
+    ): Promise<LedgerSubTotalsResponse> {
+        try {
+            if (!account || account.trim() === '') {
+                throw new BadRequestException('Account parameter is required');
+            }
+            
+            return await this.ledgerService.getAccountCashFlow(account, period);
         } catch (error) {
             if (error instanceof BadRequestException) {
                 throw error;

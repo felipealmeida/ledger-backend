@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { exec } from 'child_process';
 import { promisify } from 'util';
-import { LedgerAccount, LedgerAccountNode, LedgerTransactionNode, LedgerTransactionResponse, LedgerBalanceResponse, LedgerError } from '../types';
+import { LedgerAccount, LedgerAccountNode, LedgerTransactionNode, LedgerTransactionResponse, LedgerSubTotalNode, LedgerSubTotalsResponse, LedgerBalanceResponse, LedgerError } from '../types';
 
 const execAsync = promisify(exec);
 
@@ -125,13 +125,13 @@ export class LedgerService {
         command: string = 'bal',
         period?: string
     ): string {
-        let cmd = `ledger --flat -f /app/ledger-data/main.ledger`;
-  
+        let cmd = `ledger --flat -f /app/ledger-data/main.ledger --account-width 100`;
+        
         // Add period filter if provided
         if (period) {
             cmd += ` --period ${period}`;
         }
-  
+        
         cmd += ` ${command}`;
         return cmd;
     }
@@ -159,6 +159,68 @@ export class LedgerService {
             const parsedData = this.parseLedgerBalance(stdout);
             this.logger.log(`Successfully parsed ${parsedData.accounts.length} accounts`);
             return parsedData;
+            
+        } catch (error: unknown) {
+            const execError = error as { 
+                message: string; 
+                stderr?: string; 
+                code?: number;
+                signal?: string;
+            };
+            
+            this.logger.error(`Command execution failed: ${execError.message}`);
+            
+            const ledgerError: LedgerError = {
+                error: 'Command execution failed',
+                message: execError.message,
+                stderr: execError.stderr
+            };
+            
+            throw ledgerError;
+        }
+    }
+
+    /**
+     * Execute ledger command and return parsed results
+     */
+    async executeCashFlowLedgerCommand(
+        period?: string
+    ): Promise<LedgerSubTotalsResponse> {
+        try {
+            let cmdPositive = this.buildLedgerCommand('reg', period) + ' -s  --date-format "%Y/%m/%d" --limit "a>0"';
+            this.logger.log(`Executing command: ${cmdPositive}`);
+            
+            const { stdout: stdoutPositive, stderr: stderr1 } = await execAsync(cmdPositive, { 
+                cwd: process.cwd(),
+                timeout: 30000 // 30 second timeout
+            });
+            
+            if (stderr1) {
+                this.logger.warn(`Ledger stderr: ${stderr1}`);
+            }
+
+            let cmdNegative = this.buildLedgerCommand('reg', period) + ' -s  --date-format "%Y/%m/%d" --limit "a<0"';
+            this.logger.log(`Executing command: ${cmdNegative}`);
+            
+            const { stdout: stdoutNegative, stderr: stderr2 } = await execAsync(cmdNegative, { 
+                cwd: process.cwd(),
+                timeout: 30000 // 30 second timeout
+            });
+            
+            if (stderr2) {
+                this.logger.warn(`Ledger stderr: ${stderr2}`);
+            }
+
+            this.logger.log(`${stdoutPositive}`)
+            this.logger.log(`${stdoutNegative}`)
+
+            const positives = this.parseSubTotalTransactions(stdoutPositive);
+            const negatives = this.parseSubTotalTransactions(stdoutNegative);
+            return {
+                subtotals: this.mergeSubTotalNodes(positives, negatives),
+                period: period,
+                timestamp: new Date().toISOString()
+            };
             
         } catch (error: unknown) {
             const execError = error as { 
@@ -211,6 +273,55 @@ export class LedgerService {
         }
     }
 
+    private mergeSubTotalNodes(list1: LedgerSubTotalNode[], list2: LedgerSubTotalNode[]): LedgerSubTotalNode[] {
+        const mergedMap = new Map<string, LedgerSubTotalNode>();
+        
+        // Helper function to add or update entries
+        const addToMap = (node: LedgerSubTotalNode) => {
+            const existing = mergedMap.get(node.description);
+            if (existing) {
+                mergedMap.set(node.description, {
+                    ...existing,
+                    inflow_amount: existing.inflow_amount + node.inflow_amount,
+                    outflow_amount: existing.outflow_amount + node.outflow_amount,
+                });
+            } else {
+                mergedMap.set(node.description, { ...node });
+            }
+        };
+        
+        // Process both lists
+        list1.forEach(addToMap);
+        list2.forEach(addToMap);
+        
+        return Array.from(mergedMap.values());
+    }
+
+    private parseSubTotalTransactions(output: string): LedgerSubTotalNode[] {
+        const lines = output.split('\n').filter(line => line.trim() !== '');
+        const transactions = [];
+        
+        for (const line of lines) {
+            this.logger.log(`line ${line}`);
+            const match = line.match(/^(?:(\d{4}\/\d{2}\/\d{2}(?:\s*-\s*\d{4}\/\d{2}\/\d{2})?)\s+)?(.+?)\s+(BRL\s*[+-]?[\d,]+\.\d{2})\s+(BRL\s*[+-]?[\d,]+\.\d{2})$/);
+            if (match) {
+                this.logger.log(`a match for ${line}`);
+                const [, date, description, strAmount, runningBalance] = match;
+                const amount = parseFloat(strAmount.replace('BRL', '').replace(/,/g, '').trim());
+                const inflow = amount > 0 ? amount : 0;
+                const outflow = amount < 0 ? amount : 0;
+                transactions.push({
+                    description: description.trim(),
+                    inflow_amount: inflow,
+                    outflow_amount: outflow,
+                    runningBalance: parseFloat(runningBalance.replace('BRL', '').replace(/,/g, '').trim()),
+                });
+            }
+        }
+        
+        return transactions;
+    }
+
     private parseTransactions(output: string): LedgerTransactionNode[] {
         const lines = output.split('\n').filter(line => line.trim() !== '');
         const transactions = [];
@@ -248,5 +359,20 @@ export class LedgerService {
     async getAccountBalance(account: string, period?: string): Promise<LedgerBalanceResponse> {
         const command = `bal ${account}`;
         return this.executeLedgerCommand(command, period);
+    }
+
+    /**
+     * Get cash flow for all accounts
+     */
+    async getCashFlow(period?: string): Promise<LedgerSubTotalsResponse> {
+        return this.executeCashFlowLedgerCommand(period);
+    }
+
+    /**
+     * Get cash flow for a specific account
+     */
+    async getAccountCashFlow(account: string, period?: string): Promise<LedgerSubTotalsResponse> {
+        return this.executeCashFlowLedgerCommand(period);
+
     }
 }

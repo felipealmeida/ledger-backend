@@ -72,6 +72,20 @@ export class LedgerTransactionNode {
   date: string;
 }
 
+export class LedgerSubTotalNode {
+  @ApiProperty({ description: 'Numeric inflow amount (positive)' })
+  inflow_amount: number;
+
+  @ApiProperty({ description: 'Numeric outflow amount (negative)' })
+  outflow_amount: number;
+
+  @ApiProperty({ description: 'Numeric amount' })
+  runningBalance: number;
+
+  @ApiProperty({ description: 'Description of the transaction' })
+  description: string;
+}
+
 export class LedgerBalanceResponse {
   @ApiProperty({ type: [LedgerAccountNode], description: 'Hierarchical account tree' })
   accounts: LedgerAccountNode[];
@@ -104,6 +118,20 @@ export class LedgerTransactionResponse {
 
   @ApiProperty({ description: 'Account name' })
   account: string;
+}
+
+export class LedgerSubTotalsResponse {
+  @ApiProperty({ type: [LedgerAccountNode], description: 'Hierarchical account tree' })
+  subtotals: LedgerSubTotalNode[];
+
+  @ApiProperty({ description: 'Timestamp of the response' })
+  timestamp: string;
+
+  @ApiProperty({ description: 'Period filter used in the query', required: false })
+  period?: string;
+
+  @ApiProperty({ description: 'Account name' , required: false })
+  account?: string;
 }
 
 export class LedgerError {
