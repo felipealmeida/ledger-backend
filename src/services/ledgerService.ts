@@ -129,7 +129,7 @@ export class LedgerService {
         
         // Add period filter if provided
         if (period) {
-            cmd += ` --period ${period}`;
+            cmd += ` --period "${period}"`;
         }
         
         cmd += ` ${command}`;
