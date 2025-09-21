@@ -191,3 +191,26 @@ export class ApiDocumentation {
   @ApiProperty({ description: 'Usage examples' })
   examples: Record<string, string>;
 }
+
+// Add these interfaces to your types file
+export interface BudgetItem {
+    account: string;
+    fullPath: string;
+    actualAmount: number;
+    budgetAmount: number;
+    variance: number;
+    variancePercentage: number;
+    formattedActual: string;
+    formattedBudget: string;
+    formattedVariance: string;
+    isOverBudget: boolean;
+}
+
+export interface BudgetResponse {
+    budgetItems: BudgetItem[];
+    totalActual: number;
+    totalBudget: number;
+    totalVariance: number;
+    period: string;
+    timestamp: string;
+}

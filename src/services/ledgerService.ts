@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { exec } from 'child_process';
 import { promisify } from 'util';
-import { LedgerAccount, LedgerAccountNode, LedgerTransactionNode, LedgerTransactionResponse, LedgerSubTotalNode, LedgerSubTotalsResponse, LedgerBalanceResponse, LedgerError } from '../types';
+import { LedgerAccount, LedgerAccountNode, LedgerTransactionNode, LedgerTransactionResponse, LedgerSubTotalNode, LedgerSubTotalsResponse, LedgerBalanceResponse, LedgerError, BudgetItem, BudgetResponse } from '../types';
 
 const execAsync = promisify(exec);
 
@@ -374,5 +374,136 @@ export class LedgerService {
     async getAccountCashFlow(account: string, period?: string): Promise<LedgerSubTotalsResponse> {
         return this.executeCashFlowLedgerCommand(period);
 
+    }
+
+    // Add this method to your LedgerService class
+    async getBudgetReport(period?: string): Promise<BudgetResponse> {
+        try {
+            const cmd = `ledger -f /app/ledger-data/main.ledger --period "${period || 'this month'}" budget ^Despesas --add-budget --strict --date-format "%Y/%m/%d"`;
+            this.logger.log(`Executing budget command: ${cmd}`);
+            
+            const { stdout, stderr } = await execAsync(cmd, { 
+                cwd: process.cwd(),
+                timeout: 30000
+            });
+            
+            if (stderr) {
+                this.logger.warn(`Ledger stderr: ${stderr}`);
+            }
+            
+            return this.parseBudgetOutput(stdout, period || 'this month');
+            
+        } catch (error: unknown) {
+            const execError = error as { 
+                message: string; 
+                stderr?: string; 
+                code?: number;
+                signal?: string;
+            };
+            
+            this.logger.error(`Budget command execution failed: ${execError.message}`);
+            
+            const ledgerError: LedgerError = {
+                error: 'Budget command execution failed',
+                message: execError.message,
+                stderr: execError.stderr
+            };
+            
+            throw ledgerError;
+        }
+    }
+
+    private parseBudgetOutput(output: string, period: string): BudgetResponse {
+        const lines = output.split('\n').filter(line => line.trim() !== '');
+        const budgetItems: BudgetItem[] = [];
+        let totalActual = 0;
+        let totalBudget = 0;
+        
+        for (const line of lines) {
+            // Skip separator lines and header lines
+            if (line.includes('----') || line.includes('===') || line.trim() === '') {
+                continue;
+            }
+            
+            // Parse the 4-column budget format: Actual Budget Variance Percentage Account
+            // Example: BRL 81.79 BRL 400.00 BRL -318.21 20% Assinaturas
+            const budgetMatch = line.match(/^\s*(BRL\s*[\d,]+\.\d{2})\s+(BRL\s*[\d,]+\.\d{2})\s+(BRL\s*[+-]?[\d,]+\.\d{2})\s+(\d+)%\s+(.+)$/);
+            
+            if (budgetMatch) {
+                const [, actualStr, budgetStr, varianceStr, percentageStr, accountPath] = budgetMatch;
+                
+                const actualAmount = parseFloat(actualStr.replace('BRL', '').replace(/,/g, '').trim());
+                const budgetAmount = parseFloat(budgetStr.replace('BRL', '').replace(/,/g, '').trim());
+                const variance = parseFloat(varianceStr.replace('BRL', '').replace(/,/g, '').trim());
+                const percentage = parseFloat(percentageStr);
+                
+                // Calculate variance percentage for over/under budget determination
+                const variancePercentage = budgetAmount !== 0 ? (variance / budgetAmount) * 100 : 0;
+                
+                // Extract account name - handle indentation for sub-accounts
+                const trimmedPath = accountPath.trim();
+                const accountParts = trimmedPath.split(':');
+                const accountName = accountParts[accountParts.length - 1];
+                
+                // Determine if over budget (actual > budget for expenses)
+                const isOverBudget = actualAmount > budgetAmount;
+                
+                budgetItems.push({
+                    account: accountName,
+                    fullPath: trimmedPath,
+                    actualAmount,
+                    budgetAmount,
+                    variance,
+                    variancePercentage,
+                    formattedActual: actualStr.trim(),
+                    formattedBudget: budgetStr.trim(),
+                    formattedVariance: varianceStr.trim(),
+                    isOverBudget
+                });
+                
+                totalActual += actualAmount;
+                totalBudget += budgetAmount;
+            } else {
+                // Handle entries with 0 budget (showing as 0 in budget column)
+                // Example: BRL 36.00 0 BRL 36.00 0 Estacionamento
+                const noBudgetMatch = line.match(/^\s*(BRL\s*[\d,]+\.\d{2})\s+0\s+(BRL\s*[+-]?[\d,]+\.\d{2})\s+0\s+(.+)$/);
+                
+                if (noBudgetMatch) {
+                    const [, actualStr, varianceStr, accountPath] = noBudgetMatch;
+                    
+                    const actualAmount = parseFloat(actualStr.replace('BRL', '').replace(/,/g, '').trim());
+                    const variance = parseFloat(varianceStr.replace('BRL', '').replace(/,/g, '').trim());
+                    
+                    const trimmedPath = accountPath.trim();
+                    const accountParts = trimmedPath.split(':');
+                    const accountName = accountParts[accountParts.length - 1];
+                    
+                    budgetItems.push({
+                        account: accountName,
+                        fullPath: trimmedPath,
+                        actualAmount,
+                        budgetAmount: 0,
+                        variance,
+                        variancePercentage: 0,
+                        formattedActual: actualStr.trim(),
+                        formattedBudget: 'No Budget',
+                        formattedVariance: varianceStr.trim(),
+                        isOverBudget: false // Can't be over budget if no budget exists
+                    });
+                    
+                    totalActual += actualAmount;
+                    // Don't add to totalBudget since there's no budget
+                }
+            }
+        }
+        
+        return {
+            budgetItems,
+            totalActual,
+            totalBudget,
+            totalVariance: totalActual - totalBudget,
+            period,
+            timestamp: new Date().toISOString()
+        };
     }
 }

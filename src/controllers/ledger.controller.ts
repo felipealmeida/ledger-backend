@@ -12,7 +12,8 @@ import {
     LedgerBalanceResponse, 
     LedgerTransactionResponse, 
     LedgerSubTotalsResponse, 
-    ValidationResponse
+    ValidationResponse,
+    BudgetResponse
 } from '../types';
 import { 
     ApiTags, 
@@ -143,5 +144,20 @@ export class LedgerController {
             timestamp: new Date().toISOString(),
             service: 'ledger-api'
         };
+    }
+
+    // Add this method to your existing controller
+    @Get('budget')
+    @ApiOperation({ summary: 'Get budget vs actual spending report' })
+    @ApiQuery({ name: 'period', required: false, description: 'Period for the budget report (e.g., "this month", "2025-09")' })
+    @ApiResponse({ 
+        status: 200, 
+        description: 'Budget report retrieved successfully'
+    })
+    async getBudgetReport(
+        @Query('period') period?: string
+    ): Promise<BudgetResponse> {
+        console.log(`Getting budget report for period: ${period || 'this month'}`);
+        return this.ledgerService.getBudgetReport(period);
     }
 }
