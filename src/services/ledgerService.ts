@@ -379,7 +379,7 @@ export class LedgerService {
     // Add this method to your LedgerService class
     async getBudgetReport(period?: string): Promise<BudgetResponse> {
         try {
-            const cmd = `ledger -f /app/ledger-data/main.ledger --period "${period || 'this month'}" budget ^Despesas --add-budget --strict --date-format "%Y/%m/%d"`;
+            const cmd = `ledger -f /app/ledger-data/main.ledger --period "${period || 'this month'}" budget ^Despesas --add-budget --strict --date-format "%Y/%m/%d" --flat --account-width 100`;
             this.logger.log(`Executing budget command: ${cmd}`);
             
             const { stdout, stderr } = await execAsync(cmd, { 
@@ -414,73 +414,119 @@ export class LedgerService {
     }
 
     private parseBudgetOutput(output: string, period: string): BudgetResponse {
-        const lines = output.split('\n').filter(line => line.trim() !== '');
+        const allLines = output.split('\n').filter(line => line.trim() !== '');
+        const lastLine = allLines.pop(); // Remove and get the last line (totals)
+        const lines = allLines.filter(line => !line.includes('----')); // Remove separator lines
+        
         const budgetItems: BudgetItem[] = [];
         let totalActual = 0;
         let totalBudget = 0;
+        let totalVariance = 0;
         
-        for (const line of lines) {
-            // Skip separator lines and header lines
-            if (line.includes('----') || line.includes('===') || line.trim() === '') {
-                continue;
-            }
+        // Parse the total line first
+        if (lastLine) {
+            this.logger.log(`Parsing total line: "${lastLine}"`);
             
-            // Parse the 4-column budget format: Actual Budget Variance Percentage Account
-            // Example: BRL 81.79 BRL 400.00 BRL -318.21 20% Assinaturas
-            const budgetMatch = line.match(/^\s*(BRL\s*[\d,]+\.\d{2})\s+(BRL\s*[\d,]+\.\d{2})\s+(BRL\s*[+-]?[\d,]+\.\d{2})\s+(\d+)%\s+(.+)$/);
+            // Handle the actual format with flexible spacing
+            // Format: "BRL 45,288.72            0 BRL 45,288.72     0"
+            const totalMatchNoBudget = lastLine.match(/^\s*(BRL\s*[\d,]+\.\d{2})\s+0\s+(BRL\s*[+-]?[\d,]+\.\d{2})\s+0\s*$/);
+            // Format with percentage: "BRL 37,969.09 BRL 42,748.84 BRL -4,779.75 89%"
+            const totalMatchWithPercent = lastLine.match(/^\s*(BRL\s*[\d,]+\.\d{2})\s+(BRL\s*[\d,]+\.\d{2})\s+(BRL\s*[+-]?[\d,]+\.\d{2})\s+(\d+)%\s*$/);
+            // Format without % sign: "BRL 37,969.09 BRL 42,748.84 BRL -4,779.75 89"
+            const totalMatchWithoutPercent = lastLine.match(/^\s*(BRL\s*[\d,]+\.\d{2})\s+(BRL\s*[\d,]+\.\d{2})\s+(BRL\s*[+-]?[\d,]+\.\d{2})\s+(\d+)\s*$/);
+            
+            if (totalMatchNoBudget) {
+                // Handle "BRL amount 0 BRL variance 0" format
+                const [, actualStr, varianceStr] = totalMatchNoBudget;
+                if (actualStr && varianceStr) {
+                    totalActual = parseFloat(actualStr.replace('BRL', '').replace(/,/g, '').trim());
+                    totalBudget = 0;
+                    totalVariance = parseFloat(varianceStr.replace('BRL', '').replace(/,/g, '').trim());
+                    this.logger.log(`Parsed totals (no budget): actual=${totalActual}, budget=${totalBudget}, variance=${totalVariance}`);
+                }
+            } else if (totalMatchWithPercent) {
+                // Handle "BRL amount BRL budget BRL variance percentage%" format
+                const [, actualStr, budgetStr, varianceStr] = totalMatchWithPercent;
+                if (actualStr && budgetStr && varianceStr) {
+                    totalActual = parseFloat(actualStr.replace('BRL', '').replace(/,/g, '').trim());
+                    totalBudget = parseFloat(budgetStr.replace('BRL', '').replace(/,/g, '').trim());
+                    totalVariance = parseFloat(varianceStr.replace('BRL', '').replace(/,/g, '').trim());
+                    this.logger.log(`Parsed totals (with %): actual=${totalActual}, budget=${totalBudget}, variance=${totalVariance}`);
+                }
+            } else if (totalMatchWithoutPercent) {
+                // Handle "BRL amount BRL budget BRL variance percentage" format (no % sign)
+                const [, actualStr, budgetStr, varianceStr] = totalMatchWithoutPercent;
+                if (actualStr && budgetStr && varianceStr) {
+                    totalActual = parseFloat(actualStr.replace('BRL', '').replace(/,/g, '').trim());
+                    totalBudget = parseFloat(budgetStr.replace('BRL', '').replace(/,/g, '').trim());
+                    totalVariance = parseFloat(varianceStr.replace('BRL', '').replace(/,/g, '').trim());
+                    this.logger.log(`Parsed totals (no % sign): actual=${totalActual}, budget=${totalBudget}, variance=${totalVariance}`);
+                }
+            } else {
+                this.logger.warn(`Could not parse total line: "${lastLine}"`);
+            }
+        }
+        
+        // Parse individual budget items from remaining lines
+        for (const line of lines) {
+            this.logger.log(`Parsing line: "${line}"`);
+            
+            // Parse regular budget lines with full account paths
+            // Handle three cases: with percentage (20%), without percentage sign (20), and no percentage column
+            const budgetMatchWithPercent = line.match(/^\s*(BRL\s*[\d,]+\.\d{2})\s+(BRL\s*[\d,]+\.\d{2})\s+(BRL\s*[+-]?[\d,]+\.\d{2})\s+(\d+)%\s+(.+)$/);
+            const budgetMatchWithoutPercent = line.match(/^\s*(BRL\s*[\d,]+\.\d{2})\s+(BRL\s*[\d,]+\.\d{2})\s+(BRL\s*[+-]?[\d,]+\.\d{2})\s+(\d+)\s+(.+)$/);
+            const budgetMatchNoBudget = line.match(/^\s*(BRL\s*[\d,]+\.\d{2})\s+0\s+(BRL\s*[+-]?[\d,]+\.\d{2})\s+0\s+(.+)$/);
+            
+            const budgetMatch = budgetMatchWithPercent || budgetMatchWithoutPercent;
             
             if (budgetMatch) {
-                const [, actualStr, budgetStr, varianceStr, percentageStr, accountPath] = budgetMatch;
+                const [, actualStr, budgetStr, varianceStr, percentageStr, fullPath] = budgetMatch;
                 
-                const actualAmount = parseFloat(actualStr.replace('BRL', '').replace(/,/g, '').trim());
-                const budgetAmount = parseFloat(budgetStr.replace('BRL', '').replace(/,/g, '').trim());
-                const variance = parseFloat(varianceStr.replace('BRL', '').replace(/,/g, '').trim());
-                const percentage = parseFloat(percentageStr);
-                
-                // Calculate variance percentage for over/under budget determination
-                const variancePercentage = budgetAmount !== 0 ? (variance / budgetAmount) * 100 : 0;
-                
-                // Extract account name - handle indentation for sub-accounts
-                const trimmedPath = accountPath.trim();
-                const accountParts = trimmedPath.split(':');
-                const accountName = accountParts[accountParts.length - 1];
-                
-                // Determine if over budget (actual > budget for expenses)
-                const isOverBudget = actualAmount > budgetAmount;
-                
-                budgetItems.push({
-                    account: accountName,
-                    fullPath: trimmedPath,
-                    actualAmount,
-                    budgetAmount,
-                    variance,
-                    variancePercentage,
-                    formattedActual: actualStr.trim(),
-                    formattedBudget: budgetStr.trim(),
-                    formattedVariance: varianceStr.trim(),
-                    isOverBudget
-                });
-                
-                totalActual += actualAmount;
-                totalBudget += budgetAmount;
-            } else {
-                // Handle entries with 0 budget (showing as 0 in budget column)
-                // Example: BRL 36.00 0 BRL 36.00 0 Estacionamento
-                const noBudgetMatch = line.match(/^\s*(BRL\s*[\d,]+\.\d{2})\s+0\s+(BRL\s*[+-]?[\d,]+\.\d{2})\s+0\s+(.+)$/);
-                
-                if (noBudgetMatch) {
-                    const [, actualStr, varianceStr, accountPath] = noBudgetMatch;
+                // Add null checks
+                if (actualStr && budgetStr && varianceStr && percentageStr && fullPath) {
+                    const actualAmount = parseFloat(actualStr.replace('BRL', '').replace(/,/g, '').trim());
+                    const budgetAmount = parseFloat(budgetStr.replace('BRL', '').replace(/,/g, '').trim());
+                    const variance = parseFloat(varianceStr.replace('BRL', '').replace(/,/g, '').trim());
+                    const percentage = parseFloat(percentageStr);
                     
+                    const variancePercentage = budgetAmount !== 0 ? (variance / budgetAmount) * 100 : 0;
+                    
+                    // Extract account name from full path (last part after colon)
+                    const accountParts = fullPath.trim().split(':');
+                    const accountName = accountParts[accountParts.length - 1];
+                    
+                    const isOverBudget = actualAmount > budgetAmount;
+                    
+                    budgetItems.push({
+                        account: accountName,
+                        fullPath: fullPath.trim(),
+                        actualAmount,
+                        budgetAmount,
+                        variance,
+                        variancePercentage,
+                        formattedActual: actualStr.trim(),
+                        formattedBudget: budgetStr.trim(),
+                        formattedVariance: varianceStr.trim(),
+                        isOverBudget
+                    });
+                } else {
+                    this.logger.warn(`Missing values in budget match: actual="${actualStr}", budget="${budgetStr}", variance="${varianceStr}", percentage="${percentageStr}", path="${fullPath}"`);
+                }
+            } else if (budgetMatchNoBudget) {
+                // Handle entries with 0 budget (no percentage column)
+                const [, actualStr, varianceStr, fullPath] = budgetMatchNoBudget;
+                
+                // Add null checks
+                if (actualStr && varianceStr && fullPath) {
                     const actualAmount = parseFloat(actualStr.replace('BRL', '').replace(/,/g, '').trim());
                     const variance = parseFloat(varianceStr.replace('BRL', '').replace(/,/g, '').trim());
                     
-                    const trimmedPath = accountPath.trim();
-                    const accountParts = trimmedPath.split(':');
+                    const accountParts = fullPath.trim().split(':');
                     const accountName = accountParts[accountParts.length - 1];
                     
                     budgetItems.push({
                         account: accountName,
-                        fullPath: trimmedPath,
+                        fullPath: fullPath.trim(),
                         actualAmount,
                         budgetAmount: 0,
                         variance,
@@ -488,20 +534,23 @@ export class LedgerService {
                         formattedActual: actualStr.trim(),
                         formattedBudget: 'No Budget',
                         formattedVariance: varianceStr.trim(),
-                        isOverBudget: false // Can't be over budget if no budget exists
+                        isOverBudget: false
                     });
-                    
-                    totalActual += actualAmount;
-                    // Don't add to totalBudget since there's no budget
+                } else {
+                    this.logger.warn(`Missing values in no-budget match: actual="${actualStr}", variance="${varianceStr}", path="${fullPath}"`);
                 }
+            } else {
+                this.logger.warn(`Could not parse line: "${line}"`);
             }
         }
+        
+        this.logger.log(`Parsed ${budgetItems.length} budget items`);
         
         return {
             budgetItems,
             totalActual,
             totalBudget,
-            totalVariance: totalActual - totalBudget,
+            totalVariance,
             period,
             timestamp: new Date().toISOString()
         };
